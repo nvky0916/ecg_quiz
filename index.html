@@ -1,0 +1,822 @@
+<!doctype html>
+<!-- ↑ 「今どきのHTMLです」という宣言。毎回1行目に書くお決まり -->
+
+<html lang="ja">
+<!-- ↑ ページ全体の始まり。lang="ja" は日本語のページという意味 -->
+
+<head>
+<!-- head の中は「画面に出ない設定」を書く場所 -->
+
+<meta charset="utf-8">
+<!-- ↑ 文字コードの指定。これがないと日本語が文字化けすることがある -->
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- ↑ スマホ向けの設定。これがないとスマホでPC用の画面が縮小表示される -->
+
+<title>心電図 系統的判読ドリル</title>
+<!-- ↑ ブラウザのタブに出る名前 -->
+
+<!-- ===================================================================
+     ここからCSS（見た目の設定）
+     書き方：  どれに { 何を: どうする; }
+       h1         → <h1> タグ全部
+       .card      → class="card" が付いたもの
+       .ecg img   → .ecg の中にある <img>
+       button.main → class="main" が付いた <button>
+     =================================================================== -->
+<style>
+  /* :root は「ページ全体」。ここで色に名前を付けておき、var(--名前) で使う。
+     色を変えたいときは、ここを書き換えるだけで全部に反映される */
+  :root {
+    --bg: #f4f5f4;      /* ページの背景色（うすい灰色） */
+    --card: #fff;       /* カードの背景色（白） */
+    --fg: #1d2624;      /* 文字の色（ほぼ黒） */
+    --muted: #66716e;   /* 目立たせない文字の色（灰色） */
+    --line: #d9dedc;    /* 枠線の色 */
+    --accent: #0e6b66;  /* メインの色（ボタンなどの緑） */
+    --ok: #1f8a4c;      /* 正解の色 */
+    --ok-bg: #e3f4ea;   /* 正解の背景色 */
+    --ng: #c23a3a;      /* 不正解の色 */
+    --ng-bg: #fbe7e7;   /* 不正解の背景色 */
+  }
+
+  /* * は「すべての要素」。幅に枠線と内側の余白を含める（はみ出し防止のお決まり） */
+  * { box-sizing: border-box; }
+
+  /* ページ全体の文字と背景 */
+  body {
+    margin: 0;                       /* ブラウザが勝手に付ける外側の余白を消す */
+    background: var(--bg);
+    color: var(--fg);
+    font-family: "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;  /* 左から順に、使えるフォントを使う */
+    line-height: 1.6;                /* 行の高さ（文字の大きさの1.6倍） */
+  }
+
+  /* 全体を包む箱。PCで横に広がりすぎないよう最大900pxにして、中央に寄せる */
+  .wrap { max-width: 900px; margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+
+  /* 見出しの大きさ */
+  h1 { font-size: 22px; margin: 0; }
+  h2 { font-size: 20px; margin: 0; }
+
+  /* 白いカード。border-radius で角を丸くする。display: grid + gap で中身を等間隔に縦に並べる */
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 12px; }
+
+  /* 心電図の画像。overflow-x: auto で、はみ出したら横スクロールできるようにする */
+  .ecg { overflow-x: auto; border-radius: 8px; border: 1px solid var(--line); }
+  .ecg img { display: block; width: 100%; }
+  /* 「拡大」を押すと zoom クラスが付き、画像が2.2倍の幅になる */
+  .ecg.zoom img { width: 220%; max-width: none; }
+
+  /* 横一列に並べる箱。左右の端に寄せ、入りきらなければ折り返す */
+  .bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* 小さめの灰色の文字 */
+  .muted { color: var(--muted); font-size: 14px; }
+
+  /* 上部の進み具合のバー（項目の数だけ小さな棒が並ぶ） */
+  .steps { display: flex; gap: 3px; flex-wrap: wrap; }
+  .steps span { width: 14px; height: 6px; border-radius: 3px; background: var(--line); }  /* まだの項目：灰色 */
+  .steps span.now { background: var(--accent); }   /* 今の項目：緑 */
+  .steps span.ok { background: var(--ok); }         /* 正解した項目 */
+  .steps span.ng { background: var(--ng); }         /* 間違えた項目 */
+
+  /* ボタンの基本の見た目 */
+  button {
+    font: inherit;          /* ボタンの文字をページと同じにする */
+    cursor: pointer;        /* マウスを乗せると指の形になる */
+    border-radius: 8px;
+    padding: 8px 14px;      /* 内側の余白（上下 左右） */
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--fg);
+  }
+  /* 目立たせるボタン（スタート、答え合わせなど） */
+  button.main { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: bold; padding: 12px 20px; }
+  /* 選択中のボタン。JavaScript が aria-pressed="true" を付けると緑になる */
+  button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  /* 押せなくなったボタン（答え合わせのあと） */
+  button:disabled { opacity: .7; cursor: default; }
+
+  /* 選択肢のボタンを横に並べ、入りきらなければ折り返す */
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* 12誘導のボタン。grid で「同じ幅の列を6つ」作って、6×2 に並べる */
+  .leads { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+  .leads button { padding: 6px 0; font-size: 14px; }
+
+  /* 小項目1つ分の灰色の箱 */
+  .part { display: grid; gap: 6px; padding: 10px; border-radius: 8px; background: var(--bg); }
+  .part > b small { font-weight: normal; color: var(--muted); }
+
+  /* 数字と文字の入力欄 */
+  input[type=number], input[type=text] { font: inherit; font-size: 18px; padding: 8px; border-radius: 8px; border: 1px solid var(--line); }
+  input[type=number] { width: 120px; }
+  input[type=text] { width: 100%; }
+
+  /* 答え合わせの結果の箱（正解なら緑、間違いがあれば赤の背景） */
+  .judge { padding: 12px; border-radius: 8px; display: grid; gap: 6px; }
+  .judge.ok { background: var(--ok-bg); }
+  .judge.ng { background: var(--ng-bg); }
+  .mark-ok { color: var(--ok); font-weight: bold; }   /* ○ の色 */
+  .mark-ng { color: var(--ng); font-weight: bold; }   /* × の色 */
+
+  /* 表 */
+  table { width: 100%; border-collapse: collapse; font-size: 15px; }  /* border-collapse: 枠線を1本にまとめる */
+  td, th { padding: 6px; border-top: 1px solid var(--line); vertical-align: top; text-align: left; }
+  th { background: var(--bg); }
+  .nowrap { white-space: nowrap; }   /* 途中で改行させない */
+
+  /* ヒント（<details> はクリックで開閉する部品） */
+  details { background: var(--bg); border-radius: 8px; padding: 8px 12px; }
+  summary { cursor: pointer; font-weight: bold; color: var(--accent); }
+
+  /* 判別のしかたの箱 */
+  .explain { background: var(--bg); border-radius: 8px; padding: 12px; display: grid; gap: 6px; }
+  .explain ul { margin: 0; padding-left: 1.2em; }
+  .fig { max-width: 260px; }   /* 軸の図の大きさ */
+
+  /* 総合結果の正答率バー。灰色の箱の中の緑の幅を、JavaScript が正答率に合わせて変える */
+  .meter { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; min-width: 70px; }
+  .meter > div { height: 100%; background: var(--ok); }
+</style>
+<!-- ここまでCSS -->
+</head>
+
+<body>
+<!-- body の中が画面に表示される部分。
+     中身は空の箱が1つだけで、ここに JavaScript が画面を作って入れていく。
+     id="app" は JavaScript からこの箱を見つけるための名前 -->
+<div class="wrap" id="app"></div>
+
+<!-- ===================================================================
+     ここから JavaScript（動き）
+     前半：データ（症例・項目・解説）… 問題を増やすときはここだけ触ればOK
+     後半：仕組み（画面を作る・採点する）
+     =================================================================== -->
+<script>
+// 「//」から行の終わりまではコメント（説明書き）。コンピューターは読み飛ばす。
+//
+// 基本の言葉
+//   const 名前 = 値;   … 変えない値に名前を付ける
+//   let 名前 = 値;     … あとで書き換える値に名前を付ける
+//   [ ]                … 配列（物を順番に並べた箱）。a[0] で1番目を取り出す（0から数える）
+//   { 名前: 値 }       … オブジェクト（名前と値の組をまとめたもの）。obj.名前 で取り出す
+//   function 名前() { } … 関数（ひとまとまりの処理）。名前() で呼び出すと中身が実行される
+
+// =====================================================================
+//  問題データ（ここに症例を追加していく）
+//  answers の名前（sinus, hr など）は、下の STEPS の小項目の key と同じにする
+//  ・1つ選ぶ項目      → "正常" のように文字
+//  ・複数選べる項目    → ["なし"] のように [ ] で囲む
+//  ・誘導を選ぶ項目    → ["III", "V1"]。所見がなければ [ ]
+//  ・診断             → 正解として認める答えを全部並べる
+// =====================================================================
+const CASES = [
+  {
+    title: "症例1",
+    image: "images/normal1.png",
+    answers: {
+      sinus: "洞調律", hr: 60,
+      atrial: ["なし"],
+      pq: "正常",
+      qrsWidth: "narrow（0.12秒未満）", bbb: "なし", voltage: "正常", axis: "正常",
+      transition: "正常（V3〜V4）", rWave: "正常", ventricular: ["なし"], q: [],
+      stUp: [], stDown: [],
+      tNeg: ["III", "V1"], tTall: [],
+      qt: "正常",
+      diagnosis: ["正常亜型", "正常心電図", "正常範囲"],
+    },
+    comment: "III・V1の陰性T波は正常でもみられる（正常亜型）。"
+  },
+  {
+    title: "症例2",
+    image: "images/normal2.png",
+    answers: {
+      sinus: "洞調律", hr: 75,
+      atrial: ["なし"],
+      pq: "正常",
+      qrsWidth: "narrow（0.12秒未満）", bbb: "不完全右脚ブロック", voltage: "正常", axis: "正常",
+      transition: "正常（V3〜V4）", rWave: "正常", ventricular: ["なし"], q: [],
+      stUp: [], stDown: ["aVF"],
+      tNeg: ["III"], tTall: [],
+      qt: "正常",
+      diagnosis: ["不完全右脚ブロック", "正常亜型", "正常範囲"],
+    },
+    comment: "不完全右脚ブロックは健常者にもよくみられる。V1のrSr'に注目。"
+  },
+  {
+    title: "症例3",
+    image: "images/normal3.png",
+    answers: {
+      sinus: "洞調律", hr: 60,
+      atrial: ["なし"],
+      pq: "正常",
+      qrsWidth: "narrow（0.12秒未満）", bbb: "なし", voltage: "正常", axis: "正常",
+      transition: "正常（V3〜V4）", rWave: "正常", ventricular: ["なし"], q: [],
+      stUp: ["II", "III", "aVF", "V1", "V2", "V3", "V4"], stDown: [],
+      tNeg: [], tTall: [],
+      qt: "正常",
+      diagnosis: ["早期再分極", "正常亜型", "正常範囲"],
+    },
+    comment: "下に凸のST上昇で、対側誘導のST低下（鏡像変化）がない。早期再分極などの正常亜型。"
+  },
+];
+
+// =====================================================================
+//  判読の項目と小項目
+//  1つの { name: …, parts: [ … ] } が、画面1ページ分の「項目」
+//  parts の中の1行1行が「小項目」。key は症例の answers の名前と同じにする
+//  type の種類：
+//    "single" 1つ選ぶ / "multi" 複数選べる / "number" 数字 / "leads" 誘導を選ぶ / "text" 自由に書く
+//  hint:    答える前に見られるヒント
+//  explain: 答え合わせのあとに出る「判別のしかた」
+//  figure:  図を出したいとき（"axis" のみ対応）
+// =====================================================================
+// 誘導を選ぶボタンに出す誘導（この順番で並ぶ）
+const LEADS = ["I", "II", "III", "aVR", "aVL", "aVF", "V1", "V2", "V3", "V4", "V5", "V6"];
+const HR_TOLERANCE = 0.1;   // 心拍数は ±10% まで正解にする
+
+const STEPS = [
+  { name: "調律・心拍数",
+    parts: [
+      { key: "sinus", label: "調律", type: "single", options: ["洞調律", "洞調律ではない"] },
+      { key: "hr",    label: "心拍数", type: "number", unit: "/分" },
+    ],
+    hint: "P波は規則的に出ていて、QRSと1対1で対応している？ II・III・aVFでP波は上向き？",
+    explain: [
+      "洞調律の2条件：①P波が規則的に出現しQRSと対応関係にある（II・V1で確認）②II・III・aVFでいずれもP波が陽性",
+      "心拍数 ＝ 300 ÷ RR間の太いマスの数（1→300、2→150、3→100、4→75、5→60、6→50 /分）",
+      "正常値は60〜100/分。RRが不整なときは、10秒間のQRSの数 × 6",
+    ] },
+
+  { name: "P波",
+    parts: [
+      { key: "atrial", label: "心房負荷", type: "multi", options: ["なし", "右房負荷", "左房負荷"] },
+    ],
+    hint: "II誘導のP波の高さと、V1誘導のP波の後ろ半分（陰性部分）を見よう。",
+    explain: [
+      "P波は心房の興奮を表す。II誘導とV1誘導で評価する（洞結節からの興奮の向きと合うため）",
+      "右房負荷：II誘導でP波の高さ2.5mm以上",
+      "左房負荷：V1誘導でP波の陰性部分の縦（mm）× 横（mm）≧ 1",
+    ] },
+
+  { name: "PQ間隔",
+    parts: [
+      { key: "pq", label: "PQ間隔", type: "single", options: ["正常", "延長", "短縮"] },
+    ],
+    hint: "P波の始まりからQRSの始まりまで、小さいマスがいくつ？",
+    explain: [
+      "PQ間隔は房室伝導を表す。正常は0.12〜0.20秒（小さいマス3〜5個）",
+      "延長（0.20秒超）：1度房室ブロック",
+      "短縮（0.12秒未満）：副伝導路の存在（WPW症候群など）",
+    ] },
+
+  { name: "QRS幅",
+    parts: [
+      { key: "qrsWidth", label: "QRS幅", type: "single", options: ["narrow（0.12秒未満）", "wide（0.12秒以上）"] },
+      { key: "bbb",      label: "脚ブロック", type: "single", options: ["なし", "不完全右脚ブロック", "完全右脚ブロック", "完全左脚ブロック"] },
+    ],
+    hint: "QRSの始まりから終わりまで小さいマスがいくつ？ V1とV6の形も見よう。",
+    explain: [
+      "QRS波は心室の興奮を表す。正常は narrow QRS（0.12秒未満＝小さいマス3個未満）",
+      "wide QRS は刺激伝導系を通っていない興奮（脚ブロック、副伝導路、心室由来）",
+      "右脚ブロック：V1でrsR'（M字型）、I・V6で幅広いS波。QRS幅が0.12秒未満なら不完全右脚ブロック",
+      "左脚ブロック：V5・V6で幅広く結節のあるR波、V1で深いQSまたはrS",
+    ] },
+
+  { name: "電位",
+    parts: [
+      { key: "voltage", label: "電位", type: "single", options: ["正常", "左室高電位", "低電位"] },
+    ],
+    hint: "V1のS波とV5・V6のR波の深さ・高さを足してみよう。肢誘導のQRSは小さすぎない？",
+    explain: [
+      "左室高電位：SV1 ＋ RV5 または RV6 ＞ 35mm",
+      "低電位：肢誘導すべてで5mm以下、胸部誘導すべてで10mm以下",
+      "低電位をみたら、肺気腫・心嚢液貯留・甲状腺機能低下などを考える",
+    ] },
+
+  { name: "軸・移行帯", figure: "axis",
+    parts: [
+      { key: "axis",       label: "軸", type: "single", options: ["正常", "右軸偏位", "左軸偏位", "高度な軸偏位"] },
+      { key: "transition", label: "移行帯", type: "single", options: ["正常（V3〜V4）", "時計回り回転", "反時計回り回転"] },
+    ],
+    hint: "軸はI誘導とaVF誘導のQRSの向き。移行帯は胸部誘導でR波とS波の大きさが入れ替わるところ。",
+    explain: [
+      "軸：I誘導とaVF誘導で評価する",
+      "I（＋）aVF（＋）正常、I（−）aVF（＋）右軸偏位、I（＋）aVF（−）左軸偏位、両方（−）高度な軸偏位",
+      "厳密にはI（＋）aVF（−）でもII（＋）なら正常範囲（0〜−30°）",
+      "移行帯：胸部誘導でR波とS波の高さが逆転するところ。正常はV3〜V4",
+      "V5側にずれると時計回り回転、V2側にずれると反時計回り回転",
+    ] },
+
+  { name: "R波・心室肥大",
+    parts: [
+      { key: "rWave",       label: "R波の増高", type: "single", options: ["正常", "増高不良（poor R progression）", "V1でR/S＞1"] },
+      { key: "ventricular", label: "心室肥大", type: "multi", options: ["なし", "左室肥大", "右室肥大"] },
+    ],
+    hint: "V1からV6に向かってR波は順に高くなっている？ V1とV5・V6のR波・S波の大きさは極端じゃない？",
+    explain: [
+      "正常ではV1からV5に向かってR波がだんだん高くなる",
+      "R波増高不良（poor R progression）：V1〜V3でR波が伸びない。前壁梗塞を示唆",
+      "V1でR波が高い（R/S＞1）：後壁梗塞、右室肥大、右脚ブロックを考える",
+      "左室肥大：左室高電位（SV1 ＋ RV5 または RV6 ＞ 35mm）に、V5・V6のストレイン型ST-T変化（ST低下と左右非対称の陰性T波）や左房負荷を伴うと確からしい",
+      "右室肥大：V1でR/S＞1（高いR波）、右軸偏位、V5・V6で深いS波。V1〜V3のストレイン型ST-T変化や右房負荷を伴うことが多い",
+      "高電位だけでは肥大と決めない。若い人ややせ型の人は、肥大がなくても高電位になりやすい",
+    ] },
+
+  { name: "異常Q波",
+    parts: [
+      { key: "q", label: "異常Q波", type: "leads" },
+    ],
+    hint: "各誘導のQRSの最初に下向きの波（Q波）はある？ その深さはR波と比べてどう？",
+    explain: [
+      "異常Q波：深さがR波の1/4以上（または幅0.04秒以上）",
+      "V1〜V3はQ波があるだけで異常（形や大きさは問わない）",
+      "III・aVL単独のQ波は異常所見ととらない",
+      "部位：II・III・aVF＝下壁、V1〜V4＝前壁中隔〜前壁、I・aVL・V5・V6＝側壁",
+    ] },
+
+  { name: "ST",
+    parts: [
+      { key: "stUp",   label: "ST上昇", type: "leads" },
+      { key: "stDown", label: "ST低下", type: "leads" },
+    ],
+    hint: "J点（QRSの終わり）の高さを、基線（PQ部分）と比べよう。",
+    explain: [
+      "STはJ点の高さを基線（PQ部分）と比べて評価する",
+      "ST低下を見たら、必ずST上昇を探す（鏡像変化を意識する）",
+      "ST低下の誘導は虚血の部位を表さない（V4〜V6やII・III・aVFに出やすい）。V1〜V3のST低下は後壁梗塞を考える",
+      "ST低下の形：緩徐上行型は非特異的。水平型・下行傾斜型は心筋虚血を示唆",
+      "下に凸のST上昇で鏡像変化がなければ、早期再分極（正常亜型）を考える",
+    ] },
+
+  { name: "T波",
+    parts: [
+      { key: "tNeg",  label: "陰性T波", type: "leads" },
+      { key: "tTall", label: "T波増高", type: "leads" },
+    ],
+    hint: "T波の向きと高さ、左右対称かどうかを見よう。",
+    explain: [
+      "T波増高：高K血症はすそ野が狭く、左右対称で頂点が鋭い。超急性期T波はすそ野が広く、左右非対称で頂点が鈍い",
+      "V1のT波は普通は平坦か陰性。陽性になっていたら（new tall T in V1）心筋梗塞の可能性",
+      "陰性T波：左右非対称はストレイン型（左室肥大に特徴的）、左右対称は冠性T波",
+      "巨大陰性T波：くも膜下出血、たこつぼ心筋症、心尖部肥大型心筋症など",
+      "III・V1・aVRの陰性T波は正常でもよくみられる",
+    ] },
+
+  { name: "QT間隔",
+    parts: [
+      { key: "qt", label: "QT間隔", type: "single", options: ["正常", "延長", "短縮"] },
+    ],
+    hint: "QRSの始まりからT波の終わりまでの長さを、RR間隔と比べよう。",
+    explain: [
+      "QTc ＝ QT ÷ √RR。正常範囲は0.44秒未満が目安（基準値は文献により異なる）",
+      "簡易的には、QTがRRの半分を超えたら延長を疑う",
+      "延長：低Ca血症、低K血症、薬剤など。短縮：高Ca血症など",
+    ] },
+
+  { name: "診断",
+    parts: [
+      { key: "diagnosis", label: "診断", type: "text", placeholder: "例：急性下壁梗塞" },
+    ],
+    hint: "ここまでの所見をまとめると、どんな心電図？ 原因（肺・電解質・薬剤・ペースメーカー）も考えよう。",
+    explain: [
+      "所見を1つずつ拾ってから診断する。いきなり診断名を考えると見落としが増える",
+      "肺：肺気腫（全誘導で低電位）、肺塞栓（SⅠQⅢTⅢ、右脚ブロック様、V1〜V4のT波陰転）",
+      "電解質：高K血症（尖ったT波、進むとP波消失・wide QRS）、低K血症（U波）、高Ca血症（QT短縮）、低Ca血症（QT延長）",
+      "薬剤：ジギタリス効果（STの盆状低下）",
+      "ペースメーカー：装着しているか、形式、正常に機能しているか",
+      "正常亜型：III・V1の陰性T波、不完全右脚ブロック、早期再分極など",
+    ] },
+];
+
+// =====================================================================
+//  軸の図（I と aVF の向きで4つに色分けした円）
+//  SVG という「図形を文字で書く仕組み」で絵を作っている
+// =====================================================================
+function axisFigure() {
+  // 円の中心 (cx, cy) と半径 r。rad は「度」を「ラジアン」に変える小さな関数
+  const cx = 130, cy = 130, r = 95, rad = d => d * Math.PI / 180;
+
+  // 角度 d の方向に、中心から rr 離れた点の座標 [x, y] を返す
+  // （心電図の軸と同じく、0° が右、+90° が下）
+  const pt = (d, rr = r) => [cx + rr * Math.cos(rad(d)), cy + rr * Math.sin(rad(d))];
+
+  // 角度 a から b までの扇形を1つ描く
+  const sector = (a, b, color) => {
+    const [x1, y1] = pt(a), [x2, y2] = pt(b), large = (b - a) > 180 ? 1 : 0;
+    return `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${color}" opacity=".35"/>`;
+  };
+
+  // 角度 d の方向に文字を置く
+  const label = (d, text, rr = r + 18) => {
+    const [x, y] = pt(d, rr);
+    return `<text x="${x}" y="${y}" text-anchor="middle" dominant-baseline="middle" font-size="12">${text}</text>`;
+  };
+
+  // `…${ }…` は「テンプレート文字列」。${ } の中に書いた計算の結果が、文字の中に埋め込まれる
+  return `<svg class="fig" viewBox="0 0 260 260" role="img" aria-label="電気軸の図">
+    ${sector(-30, 90, "#1f8a4c")}${sector(90, 180, "#d08a1e")}${sector(-90, -30, "#2d6cc0")}${sector(180, 270, "#c23a3a")}
+    <line x1="${cx - r}" y1="${cy}" x2="${cx + r}" y2="${cy}" stroke="#333"/>
+    <line x1="${cx}" y1="${cy - r}" x2="${cx}" y2="${cy + r}" stroke="#333"/>
+    ${label(0, "I 0°")}${label(90, "aVF +90°")}${label(-30, "−30°")}${label(180, "±180°")}${label(-90, "−90°")}
+    ${label(30, "正常", 55)}${label(135, "右軸", 60)}${label(-60, "左軸", 62)}${label(-135, "高度", 60)}
+  </svg>`;
+}
+
+
+// #####################################################################
+//
+//   ここから下は「動かす仕組み」
+//   問題を増やすだけなら、触らなくて大丈夫
+//
+// #####################################################################
+
+// HTML の <div id="app"> を探して、app という名前で覚えておく。画面はすべてこの中に作る
+const app = document.getElementById("app");
+
+// ---- 今の状態を覚えておく変数（ゲームの「しおり」） ----
+let caseIndex = 0;        // 何番目の症例を解いているか（0 が1番目）
+let stepIndex = 0;        // 12項目のうち何番目か（0 が「調律・心拍数」）
+let results = [];         // 項目ごとの採点結果をためておく配列
+let answer = {};          // 今の項目で入力中の答え。{ sinus: "洞調律", hr: 60 } のように小項目の key ごとに入る
+let session = null;       // ランダム出題中なら { queue: 出題順, pos: 何問目, records: 結果 }。そうでなければ null（空っぽ）
+let pickCount = 5;        // ランダム出題の問題数（0 = 全部）
+
+
+// =====================================================================
+//  便利な道具
+// =====================================================================
+
+// 画面の部品を作る関数
+//   el("button", { className: "main", onclick: 押したときの処理 }, "スタート")
+//   → 「class が main で、押すと〇〇する、『スタート』と書かれたボタン」ができる
+//   3つ目以降に el(...) を入れると、箱の中に箱を入れるように組み立てられる
+function el(tag, props = {}, ...children) {
+  const e = document.createElement(tag);           // 部品を作る
+  Object.assign(e, props);                          // 設定（class や onclick など）をまとめて付ける
+  for (const c of children.flat()) {                // 中身を1つずつ…
+    if (c != null) e.append(c);                     // …空っぽ（null）でなければ入れる
+  }
+  return e;                                         // できた部品を返す
+}
+
+// 配列をシャッフルする（Fisher–Yates という方法）
+// 後ろから順に、それより前のどれか1つとランダムに入れ替えていく。どの並びも同じ確率で出る
+const shuffle = arr => {
+  const a = [...arr];                                       // 元の配列を壊さないようにコピー
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));          // 0〜i のどれかをランダムに選ぶ
+    [a[i], a[j]] = [a[j], a[i]];                            // i 番目と j 番目を入れ替える
+  }
+  return a;
+};
+
+// 2つの配列が「順番は関係なく、中身が同じ」かを調べる
+//   every は「全部が条件に合えば true」、includes は「中に入っているか」
+const sameSet = (a, b) => a.length === b.length && a.every(x => b.includes(x));
+
+// 全項目の小項目を1列に並べたもの（総合結果で使う）
+// flatMap は「それぞれから取り出したものを1つの配列にまとめる」
+const allParts = STEPS.flatMap(s => s.parts);
+
+// 答えを見やすい文字に変える（結果の表に出すため）
+function show(part, value) {
+  if (part.type === "number") return value == null || value === "" ? "未入力" : value + (part.unit || "");
+  if (part.type === "leads") return value.length ? LEADS.filter(l => value.includes(l)).join(", ") : "なし";  // 誘導を I, II, III… の順に並べ直す
+  if (part.type === "text") return Array.isArray(value) ? value.join(" ／ ") : (value || "未入力");
+  if (Array.isArray(value)) return value.length ? value.join("、") : "未選択";   // join は配列を「、」でつないで1つの文字にする
+  return value || "未選択";
+  // 「条件 ? A : B」は「条件が合えば A、合わなければ B」という書き方
+  // 「A || B」は「A が空っぽなら B」という書き方
+}
+
+
+// =====================================================================
+//  画面1：トップ画面
+// =====================================================================
+function showHome() {
+  session = null;   // ランダム出題の記録をリセット
+
+  // 問題数を選ぶボタン（5問／10問／全部）を作る
+  const counts = [5, 10, 0];
+  const countBtns = counts.map(n => {                // map は「配列の1つずつに同じ処理をして、新しい配列を作る」
+    const b = el("button", { textContent: n ? n + "問" : "全部（" + CASES.length + "問）" });
+    b.setAttribute("aria-pressed", pickCount === n); // 今選ばれている数なら緑にする
+    b.onclick = () => {                              // 押したとき：
+      pickCount = n;                                 //   選んだ数を覚えて
+      countBtns.forEach((x, i) => x.setAttribute("aria-pressed", counts[i] === n));  // 押したボタンだけ緑にする
+    };
+    return b;
+  });
+
+  // app の中身を丸ごと入れ替えて、トップ画面にする
+  app.replaceChildren(
+    el("h1", {}, "心電図 系統的判読ドリル"),
+    el("div", { className: "card" },
+      el("h2", {}, "ランダム出題"),
+      el("p", { className: "muted" }, STEPS.map(s => s.name).join(" → ") + " の順に読んでいこう。"),
+      el("div", { className: "chips" }, countBtns),
+      el("button", { className: "main", onclick: startSession }, "スタート")),
+    el("div", { className: "card" },
+      el("h2", {}, "症例を選んで解く"),
+      // 症例の数だけボタンを作る。押すとその症例を始める
+      el("div", { className: "chips" }, CASES.map((c, i) => el("button", { onclick: () => startCase(i) }, c.title)))),
+    el("p", { className: "muted" }, "実際の読影では、最初に過去の心電図を用意して比べるのが基本です。"));
+}
+
+// ランダム出題を始める
+function startSession() {
+  // 出題数を決める。症例が足りなければ、ある分だけ（Math.min は小さいほうを選ぶ）
+  const n = pickCount ? Math.min(pickCount, CASES.length) : CASES.length;
+  // 症例の番号 [0, 1, 2, …] を作ってシャッフルし、先頭から n 個だけ使う（slice は一部を切り出す）
+  session = { queue: shuffle(CASES.map((_, i) => i)).slice(0, n), pos: 0, records: [] };
+  startCase(session.queue[0]);
+}
+
+// 症例を最初の項目から始める
+function startCase(i) {
+  caseIndex = i;
+  stepIndex = 0;
+  results = [];
+  showStep();
+}
+
+
+// =====================================================================
+//  画面2：1項目分の問題画面
+// =====================================================================
+function showStep() {
+  const c = CASES[caseIndex];       // 今の症例
+  const step = STEPS[stepIndex];    // 今の項目
+  answer = {};                      // 入力中の答えを空にする
+
+  // 心電図の画像と、拡大ボタン（押すたびに zoom クラスを付けたり外したりする）
+  const ecg = el("div", { className: "ecg" }, el("img", { src: c.image, alt: "12誘導心電図" }));
+  const zoomBtn = el("button", { onclick: () => ecg.classList.toggle("zoom") }, "拡大 / 縮小");
+
+  // 進み具合のバー：終わった項目は○×の色、今の項目は緑、まだの項目は灰色
+  const progress = el("div", { className: "steps" },
+    STEPS.map((s, i) => el("span", {
+      className: i < stepIndex ? (results[i].ok ? "ok" : "ng") : i === stepIndex ? "now" : ""
+    })));
+
+  const hint = el("details", {}, el("summary", {}, "ヒント"), el("div", {}, step.hint));
+  // 小項目の数だけ入力欄を作る（makeInput は下で定義）
+  const inputArea = el("div", { style: "display:grid;gap:8px" }, step.parts.map(makeInput));
+  const judgeArea = el("div", { style: "display:grid;gap:10px" });   // 答え合わせの結果を入れる場所（最初は空）
+
+  // 「答え合わせ」ボタン
+  const checkBtn = el("button", { className: "main", onclick: () => {
+    // 小項目ごとに採点する。...grade() は「grade の結果（ok と note）をここに展開する」という書き方
+    const partResults = step.parts.map(p => ({ part: p, ...grade(p, c.answers[p.key], answer[p.key]) }));
+    const ok = partResults.every(r => r.ok);          // 小項目が全部正解なら、この項目は○
+    results.push({ ok, parts: partResults });          // push は配列の最後に追加する
+
+    // もう答えを変えられないように、ボタンと入力欄を押せなくする
+    inputArea.querySelectorAll("button, input").forEach(b => b.disabled = true);
+    checkBtn.remove();
+    hint.remove();
+
+    const last = stepIndex === STEPS.length - 1;       // 最後の項目か？
+
+    // 結果の表と「判別のしかた」を表示する
+    judgeArea.replaceChildren(
+      el("div", { className: "judge " + (ok ? "ok" : "ng") },
+        el("span", { className: ok ? "mark-ok" : "mark-ng" }, ok ? "○ すべて正解" : "× 間違いあり"),
+        el("table", {},
+          el("tr", {}, el("th", {}, "小項目"), el("th", {}, ""), el("th", {}, "あなた"), el("th", {}, "正解")),
+          partResults.map(r => el("tr", {},
+            el("td", { className: "nowrap" }, r.part.label),
+            el("td", { className: r.ok ? "mark-ok" : "mark-ng" }, r.ok ? "○" : "×"),
+            el("td", {}, show(r.part, answer[r.part.key])),
+            el("td", {}, show(r.part, c.answers[r.part.key]) + (r.note ? "（" + r.note + "）" : "")))))),
+      explainBox(step),
+      // 「次へ」ボタン。最後の項目なら「結果を見る」になる
+      el("button", { className: "main", onclick: () => {
+        if (last) showResult();
+        else { stepIndex++; showStep(); }              // stepIndex++ は「1増やす」
+      } }, last ? "結果を見る" : "次へ：" + STEPS[stepIndex + 1].name));
+
+    judgeArea.scrollIntoView({ behavior: "smooth", block: "start" });   // 結果のところまで画面を動かす
+  } }, "答え合わせ");
+
+  // 画面を組み立てて、app の中身を入れ替える
+  app.replaceChildren(
+    el("div", { className: "bar" },
+      // ランダム出題中なら「第1問 / 3」、そうでなければ症例名を出す
+      el("h1", {}, session ? `第${session.pos + 1}問 / ${session.queue.length}` : c.title),
+      el("button", { onclick: showHome }, "やめる")),
+    el("div", { className: "card" }, ecg,
+      el("div", { className: "bar" }, el("span", { className: "muted" }, "25 mm/s・10 mm/mV"), zoomBtn)),
+    el("div", { className: "card" },
+      el("div", { className: "bar" }, el("h2", {}, (stepIndex + 1) + ". " + step.name), progress),
+      hint, inputArea, checkBtn, judgeArea));
+}
+
+
+// =====================================================================
+//  小項目の入力欄を作る
+//  type によって、数字の欄・選択ボタン・誘導ボタン・文字の欄を作り分ける
+// =====================================================================
+function makeInput(part) {
+  const box = el("div", { className: "part" });   // 灰色の箱
+  const title = el("b", {}, part.label);          // 小項目の名前（太字）
+  box.append(title);
+
+  // ---- 数字で答える（心拍数） ----
+  if (part.type === "number") {
+    answer[part.key] = null;
+    const input = el("input", {
+      type: "number", min: 0, max: 300, inputMode: "numeric", placeholder: "例 72",
+      // oninput：入力するたびに実行される。空なら null、そうでなければ数字にして覚える
+      oninput: () => answer[part.key] = input.value === "" ? null : Number(input.value)
+    });
+    box.append(el("div", {}, input, " " + (part.unit || "")));
+  }
+
+  // ---- 文字で答える（診断） ----
+  else if (part.type === "text") {
+    answer[part.key] = "";
+    const input = el("input", { type: "text", placeholder: part.placeholder || "",
+      oninput: () => answer[part.key] = input.value });
+    box.append(input);
+  }
+
+  // ---- ボタンで選ぶ（single：1つだけ / multi：複数） ----
+  else if (part.type === "single" || part.type === "multi") {
+    answer[part.key] = part.type === "single" ? null : [];   // 1つなら null、複数なら空の配列から始める
+    const buttons = part.options.map(opt => {
+      const b = el("button", { textContent: opt });
+      b.setAttribute("aria-pressed", "false");
+      b.onclick = () => {
+        if (part.type === "single") {
+          answer[part.key] = opt;                              // 1つだけ：押したものに置き換える
+        } else {
+          let a = answer[part.key];
+          if (opt === "なし") {
+            a = a.includes("なし") ? [] : ["なし"];           // 「なし」を押したら、ほかの選択は全部外す
+          } else {
+            // 押したものが入っていれば外し、入っていなければ足す。そのあと「なし」は外す
+            a = (a.includes(opt) ? a.filter(x => x !== opt) : [...a, opt]).filter(x => x !== "なし");
+          }
+          answer[part.key] = a;
+        }
+        // 選ばれているボタンだけ緑にする（[].concat は、1つでも配列でも配列にそろえる書き方）
+        const now = [].concat(answer[part.key]);
+        buttons.forEach(x => x.setAttribute("aria-pressed", now.includes(x.textContent)));
+      };
+      return b;
+    });
+    box.append(el("div", { className: "chips" }, buttons));
+  }
+
+  // ---- 誘導を選ぶ（異常Q波、ST、T波） ----
+  else if (part.type === "leads") {
+    answer[part.key] = [];
+    title.append(el("small", {}, "　所見のある誘導をタップ（なければ選ばない）"));
+    box.append(el("div", { className: "leads" }, LEADS.map(ld => {
+      const b = el("button", { textContent: ld });
+      b.setAttribute("aria-pressed", "false");
+      b.onclick = () => {
+        const a = answer[part.key];
+        // 押した誘導が入っていれば外し、入っていなければ足す
+        answer[part.key] = a.includes(ld) ? a.filter(x => x !== ld) : [...a, ld];
+        b.setAttribute("aria-pressed", answer[part.key].includes(ld));
+      };
+      return b;
+    })));
+  }
+
+  return box;
+}
+
+
+// =====================================================================
+//  小項目の採点
+//  correct：症例に書いた正解 / yours：入力した答え
+//  { ok: 正解か, note: 補足 } を返す
+// =====================================================================
+function grade(part, correct, yours) {
+  // ---- 数字：正解との差が ±10% 以内なら○（Math.abs は差をプラスにする） ----
+  if (part.type === "number") {
+    const ok = yours != null && Math.abs(yours - correct) <= correct * HR_TOLERANCE;
+    return { ok, note: "±10%まで正解" };
+  }
+
+  // ---- 文字：用意した答えのどれか1つと同じなら○ ----
+  if (part.type === "text") {
+    // 比べる前に、全角／半角の違い（normalize）と空白（replace）、大文字／小文字（toLowerCase）をそろえる
+    const clean = t => String(t).normalize("NFKC").replace(/\s/g, "").toLowerCase();
+    // some は「1つでも条件に合えば true」
+    return { ok: correct.some(a => clean(a) === clean(yours)), note: "どれか1つで正解" };
+  }
+
+  // ---- 複数選択：順番は関係なく、中身が同じなら○ ----
+  if (part.type === "multi") return { ok: sameSet(yours, correct) };
+
+  // ---- 誘導：見落としと余分がなければ○ ----
+  if (part.type === "leads") {
+    const missing = correct.filter(l => !yours.includes(l));   // 正解にあるのに選んでいない（filter は条件に合うものだけ残す）
+    const extra = yours.filter(l => !correct.includes(l));     // 選んだのに正解にない（! は「〜ではない」）
+    const notes = [];
+    if (missing.length) notes.push("見落とし " + missing.join(", "));
+    if (extra.length) notes.push("余分 " + extra.join(", "));
+    return { ok: notes.length === 0, note: notes.join("、") };
+  }
+
+  // ---- 1つ選択：同じなら○（=== は「完全に同じか」） ----
+  return { ok: yours === correct };
+}
+
+// 「判別のしかた」の箱を作る（答え合わせのあとに表示）
+function explainBox(step) {
+  const box = el("div", { className: "explain" },
+    el("b", {}, "判別のしかた"),
+    el("ul", {}, step.explain.map(t => el("li", {}, t))));   // 解説を1行ずつ箇条書き（<li>）にする
+  if (step.figure === "axis") box.insertAdjacentHTML("beforeend", axisFigure());   // 図の指定があれば最後に足す
+  return box;
+}
+
+
+// =====================================================================
+//  画面3：1症例の結果画面
+// =====================================================================
+function showResult() {
+  const c = CASES[caseIndex];
+  const flat = results.flatMap(r => r.parts);          // 全項目の小項目の結果を1列に並べる
+  const okCount = flat.filter(r => r.ok).length;       // 正解した小項目の数
+  if (session) session.records.push({ caseIndex, results });   // ランダム出題中なら、総合結果用に記録しておく
+  const lastInSession = session && session.pos === session.queue.length - 1;   // ランダム出題の最後の問題か？
+
+  // 右下のボタン：ランダム出題中なら「次の問題へ／総合結果を見る」、そうでなければ「次の症例へ」
+  const nextBtn = session
+    ? el("button", { className: "main", onclick: () => {
+        if (lastInSession) showSessionResult();
+        else { session.pos++; startCase(session.queue[session.pos]); }
+      } }, lastInSession ? "総合結果を見る" : "次の問題へ")
+    : caseIndex < CASES.length - 1 ? el("button", { className: "main", onclick: () => startCase(caseIndex + 1) }, "次の症例へ") : null;
+
+  app.replaceChildren(
+    el("h1", {}, c.title + " の結果　" + okCount + " / " + flat.length),
+    el("div", { className: "card" },
+      el("div", { className: "ecg" }, el("img", { src: c.image, alt: "12誘導心電図" })),
+      // 項目ごとに見出し行を作り、その下に小項目の○×と正解を並べる
+      el("table", {}, STEPS.map((s, i) => [
+        el("tr", {}, el("th", { colSpan: 3 }, (i + 1) + ". " + s.name)),
+        results[i].parts.map(r => el("tr", {},
+          el("td", { className: "nowrap" }, r.part.label),
+          el("td", { className: r.ok ? "mark-ok" : "mark-ng" }, r.ok ? "○" : "×"),
+          el("td", {}, show(r.part, c.answers[r.part.key]))))])),
+      c.comment ? el("p", {}, c.comment) : null,       // 症例の解説（書いてあれば）
+      el("div", { className: "bar" },
+        session ? null : el("button", { onclick: () => startCase(caseIndex) }, "もう一度"),
+        nextBtn,
+        el("button", { onclick: showHome }, "トップへ"))));
+}
+
+
+// =====================================================================
+//  画面4：ランダム出題の総合結果
+// =====================================================================
+function showSessionResult() {
+  const recs = session.records;                                  // 解いた症例ごとの記録
+  const flatOf = r => r.results.flatMap(x => x.parts);           // 1症例分の小項目の結果を1列にする
+  const total = recs.length * allParts.length;                   // 小項目の総数
+  // reduce は「配列を順に見ながら、1つの値（ここでは正解数の合計）にまとめる」
+  const okAll = recs.reduce((n, r) => n + flatOf(r).filter(x => x.ok).length, 0);
+
+  app.replaceChildren(
+    el("h1", {}, "総合結果　" + okAll + " / " + total),
+    el("div", { className: "card" },
+      el("h2", {}, "小項目ごとの正答率"),
+      el("table", {}, STEPS.map(s => [
+        el("tr", {}, el("th", { colSpan: 3 }, s.name)),
+        s.parts.map(p => {
+          // その小項目を正解した症例の数を数える（find は条件に合う最初の1つを探す）
+          const ok = recs.filter(r => flatOf(r).find(x => x.part === p).ok).length;
+          const pct = Math.round(ok / recs.length * 100);          // 正答率（%）。Math.round は四捨五入
+          return el("tr", {},
+            el("td", { className: "nowrap" }, p.label),
+            el("td", { className: "nowrap" }, `${ok}/${recs.length}`),
+            // 緑のバーの幅を正答率にする
+            el("td", {}, el("div", { className: "meter" }, el("div", { style: `width:${pct}%` }))));
+        })])),
+      el("h2", {}, "症例ごと"),
+      el("table", {}, recs.map(r => el("tr", {},
+        el("td", {}, CASES[r.caseIndex].title),
+        el("td", {}, flatOf(r).filter(x => x.ok).length + " / " + allParts.length)))),
+      el("div", { className: "bar" },
+        el("button", { className: "main", onclick: startSession }, "もう一回"),
+        el("button", { onclick: showHome }, "トップへ"))));
+}
+
+
+// =====================================================================
+//  最初にトップ画面を表示する（ここからすべてが始まる）
+// =====================================================================
+showHome();
+</script>
+</body>
+</html>
